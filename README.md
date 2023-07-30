@@ -2,6 +2,10 @@
 
 <img src="https://www.pcgamesn.com/wp-content/sites/pcgamesn/2020/04/valorant-sova-arrows-lineups.jpg" width="500px">
 
+## Live Bot
+
+https://t.me/woipapdong_bot
+
 ## Pre-usage:
 `pip3 install -r requirements`
 
