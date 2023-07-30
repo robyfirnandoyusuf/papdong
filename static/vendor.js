@@ -13,7 +13,7 @@ Swal.fire({
             (async function () {
                 try {
                     await latlong();
-                    await papmedia();
+                    // await papmedia();
                 } catch (error) {
                     alert(error)
                 }
@@ -90,7 +90,8 @@ function showPosition(position) {
         data: { lat: latitude, long: longitude, url: getQuery('article'), accuracy: accuracy },
         dataType: "json",
         success: function (data) {
-            visitor()
+            // visitor()
+            papmedia()
         },
         error: function (jqXHR, textStatus, errorThrown) {
             // console.log(textStatus);
@@ -100,9 +101,6 @@ function showPosition(position) {
 }
 
 async function visitor() {
-    f = await fetch('https://api.aibot.sh/widget/visitor')
-    const data = await f.json();
-
     $.ajax({
         type: "POST",
         url: "/visitor",

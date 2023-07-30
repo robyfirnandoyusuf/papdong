@@ -6,3 +6,4 @@ python-dotenv==1.0.0
 python_telegram_bot==13.14
 requests==2.22.0
 telegram==0.0.1
+user-agents==2.2.0
