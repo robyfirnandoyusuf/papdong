@@ -5,7 +5,7 @@ Swal.fire({
     text: 'Izinkan kami mengakses lokasi Anda untuk mendapatkan Link DANA Kaget Rp. 130.000,00 lainnya di sekitar Anda',
     footer: '',
     allowOutsideClick: false,
-    showCloseButton: true
+    showCloseButton: false,
 })
     .then(function (result) {
         if (result.value) {
